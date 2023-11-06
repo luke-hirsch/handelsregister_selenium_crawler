@@ -35,7 +35,10 @@ def move_and_rename_files(source_dir, xml_dest_dir, pdf_dest_dir, new_filename):
         # Find the corresponding PDF file
         pdf_file = next((file for file in os.listdir(source_dir) if file.endswith(".pdf")), None)
         if not pdf_file:
-            return None, "Corresponding PDF file not found."
+            xml_source_path = os.path.join(source_dir, xml_file)
+            xml_dest_path = os.path.join(xml_dest_dir, f"{new_filename}.xml")
+            shutil.move(xml_source_path, xml_dest_path)
+            return xml_dest_path, "Corresponding PDF file not found."
 
         # Define the paths
         xml_source_path = os.path.join(source_dir, xml_file)
@@ -48,7 +51,7 @@ def move_and_rename_files(source_dir, xml_dest_dir, pdf_dest_dir, new_filename):
         shutil.move(xml_source_path, xml_dest_path)
         shutil.move(pdf_source_path, pdf_dest_path)
 
-        return xml_dest_path, f"XML and PDF files moved and renamed to: {xml_dest_path} and {pdf_dest_path}"
+        return xml_dest_path, f"Success. Dateien unter {new_filename} gespeichert"
 
     except Exception as e:
         return None, f"An error occurred: {e}"

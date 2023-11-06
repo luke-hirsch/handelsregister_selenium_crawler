@@ -295,7 +295,7 @@ def main():
 
     connection = MyConnector(LINK)
     connection.init_wait()
-
+    action_count = 0
     for company in my_companies:
         success = False
         splitted_str = str(company["Firma"]).split(" ")
@@ -320,6 +320,7 @@ def main():
                                 similar=search["similar"],
                                 city=str(company["Ort"]),
                             )
+                            action_count += 1
                         else:
                             connection.search(
                                 search_key=word,
@@ -330,6 +331,7 @@ def main():
                                 similar=search["similar"],
                                 city=None,
                             )
+                            action_count += 1
 
                     except Exception as e:
                         print(f"\n\nFehler: {e}\n")
@@ -342,12 +344,14 @@ def main():
                             success = connection.save_results(1)
                             connection.driver.get(LINK)
                             connection.reset_search(state=company["Bundesland"])
+                            action_count += 3
                             break
                         except Exception as e:
                             try:
                                 connection.save_results(1)
                                 connection.driver.get(LINK)
                                 connection.reset_search(state=company["Bundesland"])
+                                action_count += 3
                                 break
                             except Exception as e:
                                 line = {
