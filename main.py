@@ -1,4 +1,3 @@
-import time
 from datetime import datetime
 import os, shutil
 from src.utility import (
@@ -9,13 +8,16 @@ from src.utility import (
     append_to_csv,
     initialize_csv,
     move_and_rename_files,
-    waiting_for_godot,
+    countdown,
 )
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from src.reader import DataXML
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DOWNLOAD_DIR = "downloads"
 RESULTS_DIR = "results"
@@ -23,8 +25,11 @@ BACKUP_DIR = "storage"
 PDF_DIR = os.path.join(RESULTS_DIR, "PDF")
 XML_DIR = os.path.join(RESULTS_DIR, "XML")
 RESULT_CSV = os.path.join(RESULTS_DIR, "results.csv")
-TIME_MIN = 30
+TIME_MIN = 45
+TIMTE_BREAK = 5
 LINK = "https://www.handelsregister.de/rp_web/erweitertesuche.xhtml"
+ROUTER = "http://fritz.box/"  # momenta nur Fritzbox, sorry.
+ROUTER_KEY = os.getenv("FRITZ")
 
 
 class MyConnector:
@@ -171,13 +176,13 @@ class MyConnector:
         try:
             self.save_result_xml(tablenumber)
         except Exception as e:
-            self.log_error("XML konnte nicht gespeichert werden", str(e))
+            self.log_error(f"PDF konnte nicht gespeichert werden: {str(e)}")
 
         self.driver.back()
         try:
             self.save_result_pdf(tablenumber)
         except Exception as e:
-            self.log_error("PDF konnte nicht gespeichert werden", str(e))
+            self.log_error(f"PDF konnte nicht gespeichert werden: {str(e)}")
         self.driver.back()
         return True
 
@@ -205,6 +210,26 @@ class MyConnector:
         print("error occurred:", msg)
         raise Exception(msg)
 
+    def change_ip(self, link, psw, waiting_time):
+        self.driver.get(link)
+        self.wait.until(EC.url_to_be(link))
+        if link == "http://fritz.box/":
+            input_psw = self.driver.find_element(By.ID, "uiPassInput")
+            submit_psw = self.driver.find_element(By.ID, "submitLoginBtn")
+            input_psw.send_keys(psw)
+            self.wait.until(EC.element_to_be_clickable(submit_psw))
+            submit_psw.click()
+            self.wait.until(EC.url_to_be(str(link + "#overview")))
+            self.driver.get(str(ROUTER + "#netMoni"))
+            self.wait.until(EC.url_to_be(str(link + "#netMoni")))
+            self.wait.until(EC.presence_of_element_located((By.ID, "uiReconnectBtn")))
+            button_reconnect = self.driver.find_element(By.ID, "uiReconnectBtn")
+            self.wait.until(EC.element_to_be_clickable(button_reconnect))
+            button_reconnect.click()
+            return waiting_time
+        else:
+            return 200
+
 
 def main():
     recreate_directory(DOWNLOAD_DIR)
@@ -217,8 +242,8 @@ def main():
         {"msg": "Suche nach allen Keywrods: ", "mode": "min", "similar": False, "address": False},
         {"msg": "Suche nach allen Keywords und ähnlichen: ", "mode": "min", "similar": True, "address": False},
         {"msg": "Suche nach allen Keywords und ähnlichen: ", "mode": "min", "similar": True, "address": True},
-        # {"msg": "Suche genau nach Keyword: ", "mode": "exact", "similar": False, "address": True},
-        # {"msg": "Suche genau nach Keyword: ", "mode": "exact", "similar": False, "address": False},
+        {"msg": "Suche genau nach Keyword: ", "mode": "exact", "similar": False, "address": True},
+        {"msg": "Suche genau nach Keyword: ", "mode": "exact", "similar": False, "address": False},
         {
             "msg": "Suche genau nach Keyword und ähnlichen: ",
             "mode": "exact",
@@ -233,19 +258,7 @@ def main():
         },
     ]
     my_companies = read_csv("shortlist.csv")
-    unwanted_stuff = [
-        "und",
-        "e.",
-        "V.",
-        "GmbH",
-        "gGmbH",
-        "GBR",
-        "GbR",
-        "/",
-        "&",
-        "e.V.",
-        "eV",
-    ]
+    unwanted_stuff = ["und", "e.", "V.", "GmbH", "gGmbH", "GBR", "GbR", "/", "&", "e.V.", "eV", '"']
     error_count = 0
     if not os.path.exists(RESULTS_DIR):
         os.makedirs(RESULTS_DIR)
@@ -284,9 +297,7 @@ def main():
     connection.init_wait()
 
     for company in my_companies:
-        search_count = 0
         success = False
-        time_start = time.perf_counter()
         splitted_str = str(company["Firma"]).split(" ")
         unwanted_stuff.append(str(company["Ort"]))
         keywords = clean_list(splitted_str, unwanted_stuff)
@@ -319,10 +330,9 @@ def main():
                                 similar=search["similar"],
                                 city=None,
                             )
-                        search_count += 1
 
                     except Exception as e:
-                        write_to_terminal(f"Fehler: {e}")
+                        print(f"\n\nFehler: {e}\n")
                         error_count += 1
                         continue
 
@@ -355,7 +365,7 @@ def main():
                                     "Freitext_Vertretungsberechtigung": None,
                                     "Hinweis": f"Fehler: Ergebnis gefunden, aber Selenium Treiber bricht beim Speichern der Dateien mehrfach ab.",
                                 }
-                                print(f"{company['Firma']} - Error: {e}")
+                                print(f"\n\n{company['Firma']} - Error: {e}\n\n")
                                 append_to_csv(RESULT_CSV, line)
                                 connection.driver.get(LINK)
                                 connection.reset_search(state=company["Bundesland"])
@@ -383,16 +393,14 @@ def main():
                 "Freitext_Vertretungsberechtigung": None,
                 "Hinweis": f"Fehler: Selenium Treiber bricht ab bei Suche.",
             }
-            print(f"{company['Firma']} - Error: {e}")
+            print(f"\n\n{company['Firma']} - Error: {str(e)}\n")
             append_to_csv(RESULT_CSV, line)
             connection.driver.get(LINK)
             connection.reset_search(state=company["Bundesland"])
             error_count += 1
             continue
-        print("\ndownload")
+
         xml_path, msg = move_and_rename_files(DOWNLOAD_DIR, XML_DIR, PDF_DIR, str(company["Firma"]))
-        print("moved")
-        write_to_terminal(msg)
 
         if (xml_path == None) or (not os.path.exists(xml_path)):
             line = {
@@ -408,7 +416,7 @@ def main():
                 "Straße": company["Straße"],
                 "Code_Vertretungsberechtigung": None,
                 "Freitext_Vertretungsberechtigung": None,
-                "Hinweis": f"Fehler:Kein Eintrag gefunden :(",
+                "Hinweis": msg,
             }
             print(f"{company['Firma']} - Kein Eintrag gefunden :(")
             append_to_csv(RESULT_CSV, line)
@@ -435,16 +443,16 @@ def main():
                     "Straße": company["Straße"],
                     "Code_Vertretungsberechtigung": str(vertretung.get("codes")),
                     "Freitext_Vertretungsberechtigung": str(vertretung["texts"]).replace("\n", " ").strip(),
+                    "Hinweis": msg,
                 }
                 append_to_csv(RESULT_CSV, line)
 
-        time_end = time.perf_counter()
+        time = connection.change_ip(ROUTER, ROUTER_KEY, TIME_MIN)
+        countdown(time)
+
         connection.driver.get(LINK)
         connection.reset_search(state=str(company["Bundesland"]))
-
-        print(search_count)
-        time_min = TIME_MIN * search_count
-        waiting_for_godot(time_start=time_start, time_end=time_end, time_min=time_min)
+        countdown(TIMTE_BREAK)
 
     if error_count > 0:
         print(

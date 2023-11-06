@@ -5,20 +5,24 @@ import csv
 import time
 
 
-def waiting_for_godot(time_start, time_end, time_min):
-    time_duration = time_end - time_start
-    time_waiting = time_min - time_duration
-    while time_waiting > 1:
-        time_waiting -= 1
+def countdown(duration):
+    while duration > 1:
+        duration -= 1
         time.sleep(1)
         sys.stdout.write("\r")
-        sys.stdout.write(f"waiting.... {round(time_waiting)}s")
+        sys.stdout.write(f"waiting.... {round(duration)}s")
         sys.stdout.flush()
     sys.stdout.write("\r")
     sys.stdout.flush()
     sys.stdout.write("                    ")
     sys.stdout.write("\r")
     sys.stdout.flush()
+
+
+def waiting_for_godot(time_start, time_end, time_min):
+    time_duration = time_end - time_start
+    time_waiting = time_min - time_duration
+    countdown(time_waiting)
 
 
 def move_and_rename_files(source_dir, xml_dest_dir, pdf_dest_dir, new_filename):
